@@ -1,0 +1,40 @@
+# Build artifacts
+bin/
+build/
+dist/
+**/*.exe
+**/*.exe~
+**/*.dll
+**/*.so
+**/*.dylib
+**/*.test
+
+# Go build cache & modules
+*.out
+*.a
+*.o
+vendor/
+cover/
+coverage.out
+
+# Generated code
+/gen/
+**/mock_*
+*.pb.go
+
+# Editors & system files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Docs excluded from VCS
+docs/internal/
+AGENTS.md
+tmp/
+
+# Environment & secrets
+.env
+.env.*
+config/*.pem
+config/*.key

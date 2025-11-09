@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package cloudtap.tunnel.v1;
+
+option go_package = "github.com/forest6511/cloudtap/proto/tunnel/v1;tunnelv1";
+
+// TunnelService exposes APIs for opening and managing tunnels from cloudtapctl.
+service TunnelService {
+  // Open requests that the edge create or reuse a tunnel for the given target.
+  rpc Open(OpenRequest) returns (OpenResponse);
+
+  // Close tears down active tunnels to the target.
+  rpc Close(CloseRequest) returns (CloseResponse);
+
+  // ListTargets returns the discoverable tunnel endpoints.
+  rpc ListTargets(ListTargetsRequest) returns (ListTargetsResponse);
+}
+
+message OpenRequest {
+  string target = 1;
+}
+
+message OpenResponse {
+  string message = 1;
+}
+
+message CloseRequest {
+  string target = 1;
+}
+
+message CloseResponse {
+  string message = 1;
+}
+
+message ListTargetsRequest {}
+
+message ListTargetsResponse {
+  repeated string targets = 1;
+}

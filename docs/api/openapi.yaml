@@ -1,0 +1,70 @@
+openapi: 3.0.3
+info:
+  title: cloudtap Edge API
+  version: 0.1.0
+  description: >-
+    HTTP control-plane for cloudtapd. gRPC equivalents live in proto/tunnel/v1.
+servers:
+  - url: http://localhost:8080
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      responses:
+        '200':
+          description: Daemon is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+  /proxy:
+    get:
+      summary: Open a tunnel to a target
+      parameters:
+        - in: query
+          name: target
+          required: true
+          schema:
+            type: string
+          description: Target name returned by /targets
+      responses:
+        '200':
+          description: Tunnel initiated
+          content:
+            text/plain:
+              schema:
+                type: string
+        '400':
+          description: Missing/invalid target
+        '502':
+          description: Backend error while opening the tunnel
+  /close:
+    get:
+      summary: Close an active tunnel
+      parameters:
+        - in: query
+          name: target
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tunnel closed
+        '400':
+          description: Target missing or inactive
+  /targets:
+    get:
+      summary: List discoverable tunnel targets
+      responses:
+        '200':
+          description: Targets payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  targets:
+                    type: array
+                    items:
+                      type: string
