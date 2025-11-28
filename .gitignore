@@ -20,7 +20,7 @@ coverage.out
 # Generated code
 /gen/
 **/mock_*
-*.pb.go
+# Note: proto/*.pb.go files ARE committed for simpler CI builds
 
 # Editors & system files
 .DS_Store
