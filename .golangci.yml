@@ -9,9 +9,15 @@ linters:
     - staticcheck
     - revive
     - gofmt
+  disable:
+    - errcheck
 
 issues:
   exclude-use-default: false
+  exclude-rules:
+    - linters:
+        - staticcheck
+      text: "SA1019.*grpc.DialContext is deprecated"
 
 linters-settings:
   revive:

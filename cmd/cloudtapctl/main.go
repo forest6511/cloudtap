@@ -122,7 +122,7 @@ func requestTunnelGRPC(ctx context.Context, rt *clientRuntime, target string) er
 }
 
 func requestTunnelHTTP(ctx context.Context, rt *clientRuntime, target string) error {
-	resp, err := rt.httpRequest(ctx, "/proxy", url.Values{"target": {target}})
+	resp, err := rt.httpRequest(ctx, "/proxy", url.Values{"target": []string{target}})
 	if err != nil {
 		return err
 	}
@@ -164,7 +164,7 @@ func closeTunnelGRPC(ctx context.Context, rt *clientRuntime, target string) erro
 }
 
 func closeTunnelHTTP(ctx context.Context, rt *clientRuntime, target string) error {
-	resp, err := rt.httpRequest(ctx, "/close", url.Values{"target": {target}})
+	resp, err := rt.httpRequest(ctx, "/close", url.Values{"target": []string{target}})
 	if err != nil {
 		return err
 	}
