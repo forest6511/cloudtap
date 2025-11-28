@@ -2,8 +2,6 @@ module github.com/forest6511/cloudtap
 
 go 1.24
 
-toolchain go1.24.3
-
 require google.golang.org/grpc v1.64.0
 
 require (

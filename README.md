@@ -1,27 +1,30 @@
 # cloudtap
 
-cloudtap is the **trustworthy, inspectable, policy-first tunnel**. Unlike traditional tunneling tools that focus solely on connectivity, cloudtap provides visibility and governance for security-minded teams. It wraps existing tunnel solutions (starting with frp) to add observability, policy enforcement, and tamper-evident audit trails.
+[![CI](https://github.com/forest6511/cloudtap/actions/workflows/ci.yml/badge.svg)](https://github.com/forest6511/cloudtap/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/forest6511/cloudtap)](https://goreportcard.com/report/github.com/forest6511/cloudtap)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-- [Roadmap](./ROADMAP.md)
+**The trustworthy, inspectable, policy-first tunnel.**
+
+cloudtap wraps existing tunnel solutions (frp, ngrok) to add what they lack: visibility into who uses tunnels, policy enforcement before connections are allowed, and tamper-evident audit trails for compliance.
 
 ## Why cloudtap?
 
-Today's tunnels are black boxes. There's no unified trace, no policy, and no tamper-proof audit of who exposed what, when, and to whom. Risk acceptance is implicit and untracked.
+Today's tunnels are black boxes:
 
-cloudtap solves this by providing:
+| Problem | Impact |
+|---------|--------|
+| No visibility into tunnel usage | "Who exposed our staging DB last week?" |
+| No policy enforcement | Tunnels bypass your access controls |
+| No audit trail | Compliance gaps, incident investigation blind spots |
 
-- **Inspectable by default**: Capture connection metadata, request timelines, and structured events. Know exactly what's happening in every tunnel session.
-- **Policy-first access**: Default-deny with allow lists, role-based policies, and approval workflows. Security teams get governance without blocking developers.
-- **Tamper-evident audit**: Signed audit logs with hash chains. Prove compliance and investigate incidents with confidence.
-- **Works with existing tunnels**: Start with frp adapter today. No need to replace your current tunnel infrastructure to get visibility.
+**cloudtap solves this:**
 
-## Who is cloudtap for?
+- **Inspectable** - Capture connection metadata (who/what/when/where)
+- **Policy-first** - Default-deny with explicit allow lists
+- **Auditable** - Tamper-evident logs with hash chain verification
 
-- **Platform/SRE teams** needing governed remote access to dev/stage/internal services
-- **Regulated industries** (fintech, healthcare) requiring compliance and audit trails
-- **Tool vendors** needing auditable remote support sessions for customers
-
-## Architecture
+## How It Works
 
 ```
 ┌────────────────┐                    ┌─────────────────────┐
@@ -30,89 +33,152 @@ cloudtap solves this by providing:
 │  (frp/ngrok)   │                    │  (capture + policy) │
 └────────────────┘                    └──────────┬──────────┘
                                                  │
-                    ┌────────────────────────────┼────────────────────────────┐
-                    │                            │                            │
-                    ▼                            ▼                            ▼
-           ┌───────────────┐           ┌───────────────┐           ┌───────────────┐
-           │ Timeline      │           │ Policy        │           │ Audit Log     │
-           │ Capture       │           │ Enforcement   │           │ (signed)      │
-           └───────────────┘           └───────────────┘           └───────────────┘
-                    │                            │                            │
-                    ▼                            ▼                            ▼
-           ┌───────────────┐           ┌───────────────┐           ┌───────────────┐
-           │ OTLP/SIEM     │           │ Allow/Deny    │           │ S3/Kafka      │
-           │ Export        │           │ Decisions     │           │ Sink          │
-           └───────────────┘           └───────────────┘           └───────────────┘
+                   ┌─────────────────────────────┼─────────────────────────────┐
+                   │                             │                             │
+                   ▼                             ▼                             ▼
+          ┌───────────────┐           ┌───────────────┐            ┌───────────────┐
+          │ Timeline      │           │ Policy        │            │ Audit Log     │
+          │ Capture       │           │ Engine        │            │ (hash chain)  │
+          └───────────────┘           └───────────────┘            └───────────────┘
+                   │                             │                             │
+                   ▼                             ▼                             ▼
+          ┌───────────────┐           ┌───────────────┐            ┌───────────────┐
+          │ OTLP/SIEM     │           │ Default-Deny  │            │ S3/Kafka      │
+          │ Export        │           │ + Allow List  │            │ Export        │
+          └───────────────┘           └───────────────┘            └───────────────┘
 ```
 
-1. cloudtap wraps your existing tunnel (frp, ngrok, etc.) with an adapter
-2. The adapter captures metadata, enforces policies, and logs all access
-3. Events stream to your existing observability stack (OTLP) and audit sinks (S3, Kafka)
+1. cloudtap wraps your existing tunnel with an adapter
+2. Every connection is captured, evaluated against policy, and logged
+3. Events export to your observability stack and audit sinks
 
-## Current Status
+## Quick Start
 
-**Phase 0 - Observability + Policy Wrapper (In Development)**
+### Prerequisites
 
-We're building the frp adapter that adds:
-- Connection metadata capture (who/what/where)
-- Request timeline recording
-- Default-deny policy with allow lists
-- OTLP export to existing SIEM/APM
+- Go 1.24+
+- frp installed ([fatedier/frp](https://github.com/fatedier/frp))
 
-See the [Roadmap](./ROADMAP.md) for full phase details.
-
-## Getting Started (alpha)
-
-Prerequisites:
-
-- Go 1.24.3 or later
-- frp installed and configured (cloudtap wraps frp, doesn't replace it)
-- `golangci-lint` for development
-
-Bootstrap:
+### Install
 
 ```bash
 git clone https://github.com/forest6511/cloudtap.git
 cd cloudtap
-go mod tidy
-make build           # builds cloudtapd and cloudtapctl into ./bin
-make test && make lint
+make build
 ```
 
-### Basic Usage (with frp adapter)
+### Run
 
 ```bash
-# Start cloudtapd with frp adapter mode
+# Start cloudtapd with frp adapter
 ./bin/cloudtapd --adapter frp --frp-config /path/to/frpc.toml
 
-# Use cloudtapctl to manage policies and view timeline
+# List policies
 ./bin/cloudtapctl policy list
+
+# Add allow rule
 ./bin/cloudtapctl policy allow --target staging-api --user dev-team
+
+# View connection timeline
 ./bin/cloudtapctl timeline --last 1h
+
+# Verify audit log integrity
+./bin/cloudtapctl audit verify
 ```
 
-## API Reference
+### Example Policy (Default-Deny)
 
-- gRPC definitions: [`proto/tunnel/v1/tunnel.proto`](proto/tunnel/v1/tunnel.proto)
-- HTTP endpoints: [`docs/api/openapi.yaml`](docs/api/openapi.yaml)
+```yaml
+# cloudtap-policy.yaml
+default: deny
 
-## What We're NOT Building (for now)
+rules:
+  - name: allow-dev-team-staging
+    effect: allow
+    match:
+      target: "staging-*"
+      user: "dev-team-*"
+      source_ip: "10.0.0.0/8"
 
-- Feature parity with frp/ngrok (dashboards, file transfer, generic TCP relays)
-- Long-lived static tunnels without audit context
+  - name: allow-oncall-production
+    effect: allow
+    match:
+      target: "prod-*"
+      user: "oncall-*"
+    require:
+      approval: true
+      expires_in: 1h
+```
+
+### Example Timeline Output
+
+```json
+{
+  "events": [
+    {
+      "id": "evt_abc123",
+      "timestamp": "2024-01-15T10:30:00Z",
+      "event_type": "connection_start",
+      "target": "staging-api",
+      "user": "alice@dev-team",
+      "source_ip": "10.0.1.50",
+      "decision": "allowed",
+      "matched_policy": "allow-dev-team-staging"
+    }
+  ]
+}
+```
+
+## Who Is This For?
+
+| Audience | Use Case |
+|----------|----------|
+| **Platform/SRE teams** | Governed remote access to internal services |
+| **Regulated industries** | SOC2/PCI compliance with audit trails |
+| **Tool vendors** | Auditable remote support sessions |
+
+## What We're NOT Building
+
+- Feature parity with frp/ngrok (dashboards, file transfer)
 - Hosted tunnel marketplace
+- Raw tunnel performance competition
 
-We're focused on making tunnels inspectable and governed, not replacing tunnel infrastructure.
+We focus on **governance and observability**, not tunnel infrastructure.
+
+## Project Status
+
+**Phase 0 - Observability + Policy Wrapper** (In Development)
+
+- [ ] frp adapter with connection interception
+- [ ] Timeline capture (who/what/when)
+- [ ] Default-deny policy engine
+- [ ] Audit log with hash chain
+- [ ] OTLP export
+
+See [ROADMAP.md](ROADMAP.md) for the full plan.
+
+## Documentation
+
+- [ROADMAP.md](ROADMAP.md) - Development phases and milestones
+- [CONTRIBUTING.md](CONTRIBUTING.md) - How to contribute
+- [SECURITY.md](SECURITY.md) - Security policy and reporting
+- [docs/api/openapi.yaml](docs/api/openapi.yaml) - HTTP API specification
+- [proto/tunnel/v1/](proto/tunnel/v1/) - gRPC service definitions
 
 ## Contributing
 
-Issues are tagged by phase. Focus areas:
-- Adapters (frp, ngrok, cloudflared)
-- Policy engine and DSL
-- Observability exports (OTLP, S3, Kafka)
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-See [AGENTS.md](./AGENTS.md) for development guidelines.
+Priority areas for Phase 0:
+- `pkg/adapter/frp/` - frp adapter implementation
+- `pkg/capture/` - Connection metadata capture
+- `pkg/policy/` - Policy evaluation engine
+- `pkg/audit/` - Tamper-evident audit log
+
+## Security
+
+Please report security vulnerabilities privately. See [SECURITY.md](SECURITY.md) for details.
 
 ## License
 
-Apache 2.0 (planned). A dedicated LICENSE file will be added before the first tagged release.
+[Apache License 2.0](LICENSE)
