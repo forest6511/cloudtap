@@ -1,15 +1,19 @@
 openapi: 3.0.3
 info:
-  title: cloudtap Edge API
+  title: cloudtap API
   version: 0.1.0
   description: >-
-    HTTP control-plane for cloudtapd. gRPC equivalents live in proto/tunnel/v1.
+    HTTP control-plane for cloudtap daemon. cloudtap wraps existing tunnels
+    (frp, ngrok) to add observability, policy enforcement, and audit trails.
+    gRPC equivalents live in proto/tunnel/v1.
 servers:
   - url: http://localhost:8080
+
 paths:
   /healthz:
     get:
       summary: Liveness probe
+      tags: [Health]
       responses:
         '200':
           description: Daemon is healthy
@@ -18,53 +22,332 @@ paths:
               schema:
                 type: string
                 example: ok
-  /proxy:
+
+  /adapter/status:
     get:
-      summary: Open a tunnel to a target
-      parameters:
-        - in: query
-          name: target
-          required: true
-          schema:
-            type: string
-          description: Target name returned by /targets
+      summary: Get adapter status
+      tags: [Adapter]
+      description: Returns the status of the underlying tunnel adapter (frp, ngrok, etc.)
       responses:
         '200':
-          description: Tunnel initiated
+          description: Adapter status
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
-        '400':
-          description: Missing/invalid target
-        '502':
-          description: Backend error while opening the tunnel
-  /close:
+                $ref: '#/components/schemas/AdapterStatus'
+
+  /policy:
     get:
-      summary: Close an active tunnel
-      parameters:
-        - in: query
-          name: target
-          required: true
-          schema:
-            type: string
+      summary: List all policies
+      tags: [Policy]
       responses:
         '200':
-          description: Tunnel closed
-        '400':
-          description: Target missing or inactive
-  /targets:
-    get:
-      summary: List discoverable tunnel targets
-      responses:
-        '200':
-          description: Targets payload
+          description: List of policies
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  targets:
+                  policies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Policy'
+    post:
+      summary: Create a new policy
+      tags: [Policy]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyCreate'
+      responses:
+        '201':
+          description: Policy created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+        '400':
+          description: Invalid policy definition
+
+  /policy/{id}:
+    delete:
+      summary: Delete a policy
+      tags: [Policy]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Policy deleted
+        '404':
+          description: Policy not found
+
+  /policy/evaluate:
+    post:
+      summary: Evaluate a policy decision (dry-run)
+      tags: [Policy]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyRequest'
+      responses:
+        '200':
+          description: Policy decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyDecision'
+
+  /timeline:
+    get:
+      summary: Query connection timeline
+      tags: [Observability]
+      parameters:
+        - in: query
+          name: since
+          schema:
+            type: string
+            format: date-time
+          description: Start time for timeline query
+        - in: query
+          name: until
+          schema:
+            type: string
+            format: date-time
+          description: End time for timeline query
+        - in: query
+          name: target
+          schema:
+            type: string
+          description: Filter by target name
+        - in: query
+          name: user
+          schema:
+            type: string
+          description: Filter by user identity
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 100
+          description: Maximum number of events to return
+      responses:
+        '200':
+          description: Timeline events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TimelineEvent'
+
+  /audit:
+    get:
+      summary: Query audit log
+      tags: [Audit]
+      parameters:
+        - in: query
+          name: since
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: until
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditEntry'
+
+  /audit/verify:
+    post:
+      summary: Verify audit log integrity
+      tags: [Audit]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from_sequence:
+                  type: integer
+                to_sequence:
+                  type: integer
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  errors:
                     type: array
                     items:
                       type: string
+
+components:
+  schemas:
+    AdapterStatus:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [frp, ngrok, cloudflared]
+          example: frp
+        connected:
+          type: boolean
+        uptime_seconds:
+          type: integer
+        active_connections:
+          type: integer
+        last_error:
+          type: string
+          nullable: true
+
+    Policy:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        effect:
+          type: string
+          enum: [allow, deny]
+        match:
+          type: object
+          properties:
+            target:
+              type: string
+              description: Target pattern (glob supported)
+            user:
+              type: string
+              description: User pattern (glob supported)
+            source_ip:
+              type: string
+              description: Source IP CIDR
+        created_at:
+          type: string
+          format: date-time
+
+    PolicyCreate:
+      type: object
+      required: [name, effect, match]
+      properties:
+        name:
+          type: string
+        effect:
+          type: string
+          enum: [allow, deny]
+        match:
+          type: object
+          properties:
+            target:
+              type: string
+            user:
+              type: string
+            source_ip:
+              type: string
+
+    PolicyRequest:
+      type: object
+      properties:
+        target:
+          type: string
+        user:
+          type: string
+        source_ip:
+          type: string
+        action:
+          type: string
+          enum: [connect, proxy]
+
+    PolicyDecision:
+      type: object
+      properties:
+        allowed:
+          type: boolean
+        reason:
+          type: string
+        matched_policy:
+          type: string
+          nullable: true
+
+    TimelineEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        event_type:
+          type: string
+          enum: [connection_start, connection_end, request, response, policy_decision]
+        target:
+          type: string
+        user:
+          type: string
+        source_ip:
+          type: string
+        duration_ms:
+          type: integer
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+
+    AuditEntry:
+      type: object
+      properties:
+        sequence:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        event_type:
+          type: string
+        actor:
+          type: string
+        target:
+          type: string
+        action:
+          type: string
+        decision:
+          type: string
+          enum: [allowed, denied]
+        hash:
+          type: string
+          description: Hash of this entry (part of hash chain)
+        previous_hash:
+          type: string
+          description: Hash of previous entry (hash chain link)

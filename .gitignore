@@ -28,13 +28,19 @@ coverage.out
 .vscode/
 *.swp
 
+# AI/Claude related (also in global gitignore)
+CLAUDE.md
+AGENTS.md
+.claude/
+.serena/
+tmp/
+
 # Docs excluded from VCS
 docs/internal/
-AGENTS.md
-tmp/
 
 # Environment & secrets
 .env
 .env.*
 config/*.pem
 config/*.key
+docs/internal/
