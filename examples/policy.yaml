@@ -1,0 +1,57 @@
+# cloudtap Policy Configuration Example
+#
+# This file demonstrates the policy configuration format.
+# cloudtap uses a default-deny model - connections are rejected
+# unless explicitly allowed by a matching rule.
+#
+# Rules are evaluated in order. The first matching rule wins.
+# If no rule matches, the default effect is applied.
+
+# Default effect when no rules match.
+# Options: "allow" or "deny"
+# Default: "deny" (if not specified)
+default: deny
+
+rules:
+  # Allow developers to access staging services from internal network
+  - name: allow-dev-staging
+    effect: allow
+    match:
+      target: "staging-*"      # Glob pattern for target service
+      user: "dev-*"            # Glob pattern for username
+      source_ip: "10.0.0.0/8"  # CIDR notation for source IP
+
+  # Allow admin users to access any service
+  - name: allow-admin-all
+    effect: allow
+    match:
+      user: "admin"
+
+  # Allow monitoring from specific subnet
+  - name: allow-monitoring
+    effect: allow
+    match:
+      target: "*-metrics"
+      source_ip: "192.168.100.0/24"
+
+  # Deny access to production databases from external IPs
+  - name: deny-prod-db-external
+    effect: deny
+    match:
+      target: "prod-db-*"
+      # No source_ip means match any source
+
+  # Allow internal access to production web services
+  - name: allow-prod-web-internal
+    effect: allow
+    match:
+      target: "prod-web-*"
+      source_ip: "10.0.0.0/8"
+      protocol: "http"
+
+  # Allow HTTP/HTTPS traffic to public services
+  - name: allow-public-http
+    effect: allow
+    match:
+      target: "public-*"
+      protocol: "https"
