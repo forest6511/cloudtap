@@ -71,6 +71,10 @@ type Config struct {
 	// Set to 0 for unlimited retries.
 	// Default: 10.
 	MaxRetries int `json:"max_retries"`
+
+	// Webhook contains the configuration for the plugin webhook server.
+	// If not set, defaults are applied.
+	Webhook WebhookConfig `json:"webhook"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -79,6 +83,7 @@ func DefaultConfig() Config {
 		RestartDelay:    time.Second,
 		MaxRestartDelay: 5 * time.Minute,
 		MaxRetries:      10,
+		Webhook:         DefaultWebhookConfig(),
 	}
 }
 
@@ -131,6 +136,9 @@ type Adapter struct {
 	cmd       *exec.Cmd
 	startedAt time.Time
 
+	// Webhook server for event interception
+	webhook *WebhookServer
+
 	// Reconnection tracking
 	reconnectAttempts atomic.Int32
 	lastError         atomic.Value // stores string
@@ -160,12 +168,17 @@ func New(cfg Config, logger *slog.Logger) *Adapter {
 		cfg.MaxRetries = 10
 	}
 
-	return &Adapter{
+	a := &Adapter{
 		config:   cfg,
 		logger:   logger.With("adapter", "frp"),
 		runner:   &defaultCommandRunner{},
 		doneChan: make(chan struct{}),
 	}
+
+	// Create webhook server
+	a.webhook = NewWebhookServer(cfg.Webhook, logger)
+
+	return a
 }
 
 // SetCommandRunner sets a custom command runner for testing.
@@ -180,6 +193,11 @@ func (a *Adapter) OnConnection(handler adapter.ConnectionHandler) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.handler = handler
+
+	// Also set handler on webhook server
+	if a.webhook != nil {
+		a.webhook.SetHandler(handler)
+	}
 }
 
 // Start begins the frp adapter and underlying frpc process.
@@ -213,10 +231,23 @@ func (a *Adapter) Start(ctx context.Context) error {
 	a.logger.Info("starting frp adapter",
 		"frpc_path", a.config.FrpcPath,
 		"config_path", a.config.ConfigPath,
+		"webhook_addr", a.config.Webhook.ListenAddr,
 	)
+
+	// Start webhook server in background
+	webhookErrChan := make(chan error, 1)
+	go func() {
+		webhookErrChan <- a.webhook.Start(ctx)
+	}()
+
+	// Give webhook server time to start
+	time.Sleep(50 * time.Millisecond)
 
 	// Run the process management loop
 	err := a.runLoop(ctx)
+
+	// Wait for webhook server to stop
+	<-webhookErrChan
 
 	// Signal that we're done
 	close(a.doneChan)
@@ -273,14 +304,20 @@ func (a *Adapter) Status() adapter.Status {
 		lastErrorAt = v.(time.Time)
 	}
 
+	// Get active connections from webhook server
+	activeConnections := 0
+	if a.webhook != nil {
+		activeConnections = a.webhook.ActiveConnections()
+	}
+
 	return adapter.Status{
 		Type:              "frp",
 		Connected:         a.started.Load() && !a.stopped.Load() && a.isProcessRunning(),
 		StartedAt:         startedAt,
 		UptimeSeconds:     uptimeSeconds,
-		ActiveConnections: 0, // TODO: Track active connections via webhook
+		ActiveConnections: activeConnections,
 		ReconnectAttempts: int(a.reconnectAttempts.Load()),
-		BackendEndpoint:   "", // TODO: Parse from config
+		BackendEndpoint:   a.config.Webhook.ListenAddr,
 		LastError:         lastError,
 		LastErrorAt:       lastErrorAt,
 	}
