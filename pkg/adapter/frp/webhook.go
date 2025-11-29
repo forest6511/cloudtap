@@ -235,7 +235,9 @@ func (s *WebhookServer) Start(ctx context.Context) error {
 		s.started.Store(false)
 		return fmt.Errorf("frp: failed to listen on %s: %w", s.config.ListenAddr, err)
 	}
+	s.mu.Lock()
 	s.listener = listener
+	s.mu.Unlock()
 
 	// Create HTTP server
 	mux := http.NewServeMux()
@@ -300,8 +302,11 @@ func (s *WebhookServer) ActiveConnections() int {
 
 // Addr returns the listener address, useful for testing.
 func (s *WebhookServer) Addr() string {
-	if s.listener != nil {
-		return s.listener.Addr().String()
+	s.mu.RLock()
+	listener := s.listener
+	s.mu.RUnlock()
+	if listener != nil {
+		return listener.Addr().String()
 	}
 	return ""
 }
